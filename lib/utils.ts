@@ -249,36 +249,93 @@ export const calculateRecordingDuration = (startTime: number | null): number =>
     startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
 
 export function parseTranscript(transcript: string): TranscriptEntry[] {
-    const lines = transcript.replace(/^WEBVTT\s*/, "").split("\n");
+    if (!transcript || transcript.trim().length === 0) {
+        return [];
+    }
+
+    // Remove WEBVTT header and any metadata lines
+    const cleanedTranscript = transcript
+        .replace(/^WEBVTT\s*/i, "")
+        .replace(/^NOTE\s+.*$/gim, "")  // Remove NOTE lines
+        .replace(/^Kind:.*$/gim, "")     // Remove Kind metadata
+        .replace(/^Language:.*$/gim, ""); // Remove Language metadata
+
+    const lines = cleanedTranscript.split("\n");
     const result: TranscriptEntry[] = [];
     let tempText: string[] = [];
     let startTime: string | null = null;
 
     for (const line of lines) {
         const trimmedLine = line.trim();
+        
+        // Skip empty lines and cue identifiers (numbers)
+        if (!trimmedLine || /^\d+$/.test(trimmedLine)) {
+            continue;
+        }
+
+        // Match timestamp line with various formats
+        // Supports: HH:MM:SS.mmm --> HH:MM:SS.mmm (full format with hours)
+        // Also supports: MM:SS.mmm --> MM:SS.mmm (short format without hours)
+        // Accepts both dot (.) and comma (,) as decimal separator
+        // Regex breakdown:
+        // ^(\d{1,2}:)?         - Optional hours with colon (capture group 1)
+        // (\d{2}:\d{2})        - Minutes:seconds (capture group 2)
+        // [\.,](\d{3})         - Dot or comma + milliseconds (capture group 3)
+        // \s*-->\s*            - Arrow separator with optional whitespace
+        // (\d{1,2}:)?          - End time hours (capture group 4)
+        // (\d{2}:\d{2})        - End time minutes:seconds (capture group 5)
+        // [\.,](\d{3})         - End time milliseconds (capture group 6)
         const timeMatch = trimmedLine.match(
-            /(\d{2}:\d{2}:\d{2})\.\d{3}\s-->\s(\d{2}:\d{2}:\d{2})\.\d{3}/
+            /^(\d{1,2}:)?(\d{2}:\d{2})[\.,](\d{3})\s*-->\s*(\d{1,2}:)?(\d{2}:\d{2})[\.,](\d{3})/
         );
 
         if (timeMatch) {
+            // Save previous caption if exists
             if (tempText.length > 0 && startTime) {
-                result.push({ time: startTime, text: tempText.join(" ") });
+                result.push({ 
+                    time: startTime, 
+                    text: tempText.join(" ").trim() 
+                });
                 tempText = [];
             }
-            startTime = timeMatch[1] ?? null;
+            
+            // Extract start time and format it properly
+            // timeMatch[1] contains hour part with colon (e.g., "01:") or undefined
+            // timeMatch[2] contains minutes and seconds (e.g., "23:45")
+            const hourPart = timeMatch[1] ? timeMatch[1].replace(":", "") : "00";
+            const minutesSeconds = timeMatch[2];
+            startTime = hourPart === "00" ? minutesSeconds : `${hourPart}:${minutesSeconds}`;
         } else if (trimmedLine) {
-            tempText.push(trimmedLine);
+            // Remove HTML tags and styling from caption text
+            // Use a comprehensive sanitization to prevent XSS vulnerabilities
+            // Remove all < and > characters (including incomplete tags), then remove WebVTT styling
+            const cleanText = trimmedLine
+                .replace(/[<>]/g, "")  // Remove all < and > to prevent any HTML injection
+                .replace(/\{[^}]*\}/g, "")  // Remove WebVTT styling curly braces
+                .trim();
+            
+            if (cleanText) {
+                tempText.push(cleanText);
+            }
         }
 
+        // Group longer text segments (every 3 lines or at logical breaks)
         if (tempText.length >= 3 && startTime) {
-            result.push({ time: startTime, text: tempText.join(" ") });
+            result.push({ 
+                time: startTime, 
+                text: tempText.join(" ").trim() 
+            });
             tempText = [];
             startTime = null;
         }
     }
 
+    // Add any remaining text
     if (tempText.length > 0 && startTime) {
-        result.push({ time: startTime, text: tempText.join(" ") });
+        result.push({ 
+            time: startTime, 
+            text: tempText.join(" ").trim() 
+        });
     }
 
     return result;
@@ -303,8 +360,8 @@ export function daysAgo(inputDate: Date): string {
 export const createIframeLink = (videoId: string) =>
     `https://iframe.mediadelivery.net/embed/496531/${videoId}?autoplay=true&preload=true`;
 
-export const doesTitleMatch = (videos: any, searchQuery: string) =>
+export const doesTitleMatch = (videosTable: typeof videos, searchQuery: string) =>
     ilike(
-        sql`REPLACE(REPLACE(REPLACE(LOWER(${videos.title}), '-', ''), '.', ''), ' ', '')`,
+        sql`REPLACE(REPLACE(REPLACE(LOWER(${videosTable.title}), '-', ''), '.', ''), ' ', '')`,
         `%${searchQuery.replace(/[-. ]/g, "").toLowerCase()}%`
     );
