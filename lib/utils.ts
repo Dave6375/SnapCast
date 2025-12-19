@@ -307,9 +307,11 @@ export function parseTranscript(transcript: string): TranscriptEntry[] {
             startTime = hourPart === "00" ? minutesSeconds : `${hourPart}:${minutesSeconds}`;
         } else if (trimmedLine) {
             // Remove HTML tags and styling from caption text
+            // Use a comprehensive sanitization to prevent XSS vulnerabilities
+            // Remove all < and > characters (including incomplete tags), then remove WebVTT styling
             const cleanText = trimmedLine
-                .replace(/<[^>]*>/g, "")  // Remove HTML tags
-                .replace(/\{[^}]*\}/g, "") // Remove WebVTT styling
+                .replace(/[<>]/g, "")  // Remove all < and > to prevent any HTML injection
+                .replace(/\{[^}]*\}/g, "")  // Remove WebVTT styling curly braces
                 .trim();
             
             if (cleanText) {
