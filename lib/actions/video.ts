@@ -131,7 +131,53 @@ export const saveVideoDetails = withErrorHandling(async (videoDetails: VideoDeta
 
     revalidatePath('/')
 
+    // Attempt to generate captions for the video (non-blocking)
+    generateVideoCaptions(videoDetails.videoId).catch(err => {
+        console.log('Caption generation initiated or failed:', err);
+    });
+
     return { videoId: videoDetails.videoId}
+});
+
+// Function to generate captions for a video
+export const generateVideoCaptions = withErrorHandling(async (videoId: string) => {
+    try {
+        // Check if video exists and is ready for caption generation
+        const videoInfo = await apiFetch<any>(
+            `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}`,
+            {
+                method: 'GET',
+                bunnyType: 'stream',
+            }
+        );
+
+        // Only generate captions if video is processed (status 4 or 5)
+        if (videoInfo.status < 4) {
+            console.log('Video not ready for caption generation yet');
+            return { success: false, message: 'Video not processed yet' };
+        }
+
+        // Add caption using Bunny Stream API
+        // Note: This adds an auto-generated caption track
+        await apiFetch(
+            `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}/captions/en`,
+            {
+                method: 'POST',
+                bunnyType: 'stream',
+                body: {
+                    srclang: 'en',
+                    label: 'English',
+                    captionsFile: '' // Empty for auto-generation
+                }
+            }
+        );
+
+        console.log('Caption generation request sent for video:', videoId);
+        return { success: true, message: 'Caption generation initiated' };
+    } catch (error) {
+        console.error('Error generating captions:', error);
+        return { success: false, message: 'Caption generation failed' };
+    }
 });
 
 // /?SearchQuery=test&pageNumber=2
@@ -206,41 +252,66 @@ export const getVideoTranscript = withErrorHandling(async (videoId: string) => {
             }
         );
 
+        console.log('Video info response:', videoInfoResponse);
+
         // Check if captions/transcript is available
         if (!videoInfoResponse.captions || videoInfoResponse.captions.length === 0) {
+            console.log('No captions available for video:', videoId);
             return null; // No transcript available
         }
 
-        // Get the transcript URL - Bunny usually provides VTT format
-        const transcriptUrl = `${BUNNY.TRANSCRIPT_URL}/${BUNNY_LIBRARY_ID}/${videoId}/captions/en.vtt`;
+        // Get the first available caption (usually 'en' or first language)
+        const firstCaption = videoInfoResponse.captions[0];
+        const captionLanguage = firstCaption.srclang || 'en';
         
-        // Fetch the transcript file
-        const transcriptResponse = await fetch(transcriptUrl, {
-            headers: {
-                'AccessKey': ACCESS_KEYS.streamAccessKey,
-            }
-        });
+        console.log('Found caption:', captionLanguage, firstCaption);
 
-        if (!transcriptResponse.ok) {
-            // Try alternative URL format if the first one fails
-            const alternativeUrl = `https://video.bunnycdn.com/library/${BUNNY_LIBRARY_ID}/videos/${videoId}/captions/en.vtt`;
-            const altResponse = await fetch(alternativeUrl, {
-                headers: {
-                    'AccessKey': ACCESS_KEYS.streamAccessKey,
+        // Use the Bunny Stream API to fetch caption content
+        // The API endpoint is: GET /library/{libraryId}/videos/{videoId}/captions/{srclang}
+        try {
+            const captionData = await apiFetch<any>(
+                `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}/captions/${captionLanguage}`,
+                {
+                    method: 'GET',
+                    bunnyType: 'stream',
+                    expectJson: false,
                 }
-            });
+            );
             
-            if (!altResponse.ok) {
-                return null;
+            console.log('Successfully fetched caption data');
+            return captionData as unknown as string;
+        } catch (apiError) {
+            console.log('API fetch failed, trying direct URL access');
+            
+            // Fallback: Try to fetch the VTT file directly from CDN if available
+            if (firstCaption.label || firstCaption.srclang) {
+                // Try the pull zone URL format
+                const cdnUrl = `https://vz-${videoInfoResponse.guid?.substring(0, 8) || 'default'}.b-cdn.net/${videoId}/captions/${captionLanguage}.vtt`;
+                console.log('Trying CDN URL:', cdnUrl);
+                
+                const cdnResponse = await fetch(cdnUrl);
+                
+                if (cdnResponse.ok) {
+                    console.log('Successfully fetched from CDN');
+                    return await cdnResponse.text();
+                }
             }
             
-            return await altResponse.text();
+            // Last resort: try the embed URL path
+            const embedUrl = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${videoId}/captions/${captionLanguage}.vtt`;
+            console.log('Trying embed URL:', embedUrl);
+            
+            const embedResponse = await fetch(embedUrl);
+            if (embedResponse.ok) {
+                console.log('Successfully fetched from embed URL');
+                return await embedResponse.text();
+            }
+            
+            console.log('All fetch attempts failed');
+            return null;
         }
-
-        return await transcriptResponse.text();
     } catch (error) {
         console.error('Error fetching transcript:', error);
         return null;
     }
-
     });
