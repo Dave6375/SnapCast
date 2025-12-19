@@ -277,6 +277,14 @@ export function parseTranscript(transcript: string): TranscriptEntry[] {
         // Supports: HH:MM:SS.mmm --> HH:MM:SS.mmm (full format with hours)
         // Also supports: MM:SS.mmm --> MM:SS.mmm (short format without hours)
         // Accepts both dot (.) and comma (,) as decimal separator
+        // Regex breakdown:
+        // ^(\d{1,2}:)?         - Optional hours with colon (capture group 1)
+        // (\d{2}:\d{2})        - Minutes:seconds (capture group 2)
+        // [\.,](\d{3})         - Dot or comma + milliseconds (capture group 3)
+        // \s*-->\s*            - Arrow separator with optional whitespace
+        // (\d{1,2}:)?          - End time hours (capture group 4)
+        // (\d{2}:\d{2})        - End time minutes:seconds (capture group 5)
+        // [\.,](\d{3})         - End time milliseconds (capture group 6)
         const timeMatch = trimmedLine.match(
             /^(\d{1,2}:)?(\d{2}:\d{2})[\.,](\d{3})\s*-->\s*(\d{1,2}:)?(\d{2}:\d{2})[\.,](\d{3})/
         );

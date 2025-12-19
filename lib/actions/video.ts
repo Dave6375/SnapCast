@@ -132,9 +132,12 @@ export const saveVideoDetails = withErrorHandling(async (videoDetails: VideoDeta
     revalidatePath('/')
 
     // Attempt to generate captions for the video (non-blocking)
-    generateVideoCaptions(videoDetails.videoId).catch(err => {
-        console.log('Caption generation initiated or failed:', err);
-    });
+    // Only if we have a valid videoId from a successful upload
+    if (videoDetails.videoId && typeof videoDetails.videoId === 'string') {
+        generateVideoCaptions(videoDetails.videoId).catch(err => {
+            console.log('Caption generation initiated or failed:', err);
+        });
+    }
 
     return { videoId: videoDetails.videoId}
 });
@@ -164,15 +167,16 @@ export const generateVideoCaptions = withErrorHandling(async (videoId: string) =
         }
 
         // Add caption using Bunny Stream API
-        // Note: This adds an auto-generated caption track
+        // Note: Currently hardcoded to English ('en'). 
+        // TODO: Make language configurable or auto-detect video language for multi-language support
         await apiFetch(
             `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}/captions/en`,
             {
                 method: 'POST',
                 bunnyType: 'stream',
                 body: {
-                    srclang: 'en',
-                    label: 'English',
+                    srclang: 'en', // Language code - TODO: make configurable
+                    label: 'English', // Display label - TODO: make configurable
                     captionsFile: '' // Empty for auto-generation
                 }
             }
