@@ -1,0 +1,6 @@
+{
+  "databaseURL": "https://David-Idoko-s-workspace-8lv535.us-east-1.xata.sh/db/jsm_snapcast",
+  "codegen": {
+    "output": "src/xata.ts"
+  }
+}

@@ -1,0 +1,7 @@
+/*
+Old .video-player CSS before resizing:
+
+.video-player {
+  @apply relative aspect-video w-full rounded-2xl bg-[#000] flex-none;
+}
+*/
