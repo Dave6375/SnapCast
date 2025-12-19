@@ -274,7 +274,9 @@ export function parseTranscript(transcript: string): TranscriptEntry[] {
         }
 
         // Match timestamp line with various formats
-        // Supports: HH:MM:SS.mmm --> HH:MM:SS.mmm and MM:SS.mmm --> MM:SS.mmm
+        // Supports: HH:MM:SS.mmm --> HH:MM:SS.mmm (full format with hours)
+        // Also supports: MM:SS.mmm --> MM:SS.mmm (short format without hours)
+        // Accepts both dot (.) and comma (,) as decimal separator
         const timeMatch = trimmedLine.match(
             /^(\d{1,2}:)?(\d{2}:\d{2})[\.,](\d{3})\s*-->\s*(\d{1,2}:)?(\d{2}:\d{2})[\.,](\d{3})/
         );
@@ -289,10 +291,12 @@ export function parseTranscript(transcript: string): TranscriptEntry[] {
                 tempText = [];
             }
             
-            // Extract start time, format it properly
-            const hours = timeMatch[1] ? timeMatch[1].replace(":", "") : "00";
+            // Extract start time and format it properly
+            // timeMatch[1] contains hour part with colon (e.g., "01:") or undefined
+            // timeMatch[2] contains minutes and seconds (e.g., "23:45")
+            const hourPart = timeMatch[1] ? timeMatch[1].replace(":", "") : "00";
             const minutesSeconds = timeMatch[2];
-            startTime = hours === "00" ? minutesSeconds : `${hours}:${minutesSeconds}`;
+            startTime = hourPart === "00" ? minutesSeconds : `${hourPart}:${minutesSeconds}`;
         } else if (trimmedLine) {
             // Remove HTML tags and styling from caption text
             const cleanText = trimmedLine

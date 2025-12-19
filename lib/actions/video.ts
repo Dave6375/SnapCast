@@ -178,11 +178,12 @@ export const generateVideoCaptions = withErrorHandling(async (videoId: string) =
             }
         );
 
-        console.log('Caption generation request sent for video:', videoId);
+        console.log('Caption generation request sent successfully for video:', videoId);
         return { success: true, message: 'Caption generation initiated' };
     } catch (error) {
-        console.error('Error generating captions:', error);
-        return { success: false, message: 'Caption generation failed' };
+        console.error('Failed to generate captions:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return { success: false, message: `Caption generation failed: ${errorMessage}` };
     }
 });
 
@@ -290,9 +291,10 @@ export const getVideoTranscript = withErrorHandling(async (videoId: string) => {
             console.log('API fetch failed, trying direct URL access');
             
             // Fallback: Try to fetch the VTT file directly from CDN if available
-            if (firstCaption.label || firstCaption.srclang) {
-                // Try the pull zone URL format
-                const cdnUrl = `https://vz-${videoInfoResponse.guid?.substring(0, 8) || 'default'}.b-cdn.net/${videoId}/captions/${captionLanguage}.vtt`;
+            if ((firstCaption.label || firstCaption.srclang) && videoInfoResponse.guid) {
+                // Try the pull zone URL format - only if we have a valid guid
+                const guidPrefix = videoInfoResponse.guid.substring(0, 8);
+                const cdnUrl = `https://vz-${guidPrefix}.b-cdn.net/${videoId}/captions/${captionLanguage}.vtt`;
                 console.log('Trying CDN URL:', cdnUrl);
                 
                 const cdnResponse = await fetch(cdnUrl);
@@ -301,6 +303,8 @@ export const getVideoTranscript = withErrorHandling(async (videoId: string) => {
                     console.log('Successfully fetched from CDN');
                     return await cdnResponse.text();
                 }
+                
+                console.log('CDN fetch failed, trying embed URL');
             }
             
             // Last resort: try the embed URL path
