@@ -20,6 +20,14 @@ export const BUNNY = {
     CDN_URL: "https://snapcast-pull.b-cdn.net",
     EMBED_URL: "https://iframe.mediadelivery.net/embed",
     TRANSCRIPT_URL: "https://vz-f83a8252-f39.b-cdn.net",
+    VIDEO_STATUS: {
+        QUEUED: 0,
+        PROCESSING: 1,
+        ENCODING: 2,
+        FINISHED: 3,
+        RESOLUTION_FINISHED: 4,
+        FAILED: 5,
+    },
 };
 
 export const emojis = ["😂", "😍", "👍"];

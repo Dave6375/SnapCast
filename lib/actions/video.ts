@@ -143,7 +143,7 @@ export const saveVideoDetails = withErrorHandling(async (videoDetails: VideoDeta
 export const generateVideoCaptions = withErrorHandling(async (videoId: string) => {
     try {
         // Check if video exists and is ready for caption generation
-        const videoInfo = await apiFetch<any>(
+        const videoInfo = await apiFetch<BunnyVideoInfo>(
             `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}`,
             {
                 method: 'GET',
@@ -151,10 +151,16 @@ export const generateVideoCaptions = withErrorHandling(async (videoId: string) =
             }
         );
 
-        // Only generate captions if video is processed (status 4 or 5)
-        if (videoInfo.status < 4) {
-            console.log('Video not ready for caption generation yet');
+        // Only generate captions if video is processed (status 3 - FINISHED or higher)
+        if (videoInfo.status < BUNNY.VIDEO_STATUS.FINISHED) {
+            console.log('Video not ready for caption generation yet, status:', videoInfo.status);
             return { success: false, message: 'Video not processed yet' };
+        }
+
+        // Check if captions already exist
+        if (videoInfo.captions && videoInfo.captions.length > 0) {
+            console.log('Captions already exist for video:', videoId);
+            return { success: true, message: 'Captions already exist' };
         }
 
         // Add caption using Bunny Stream API
@@ -244,7 +250,7 @@ export const getVideoById = withErrorHandling(async (videoId: string) => {
 export const getVideoTranscript = withErrorHandling(async (videoId: string) => {
     try {
         // First, get video info from Bunny to check if transcript is available
-        const videoInfoResponse = await apiFetch<any>(
+        const videoInfoResponse = await apiFetch<BunnyVideoInfo>(
             `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}`,
             {
                 method: 'GET',
@@ -269,7 +275,7 @@ export const getVideoTranscript = withErrorHandling(async (videoId: string) => {
         // Use the Bunny Stream API to fetch caption content
         // The API endpoint is: GET /library/{libraryId}/videos/{videoId}/captions/{srclang}
         try {
-            const captionData = await apiFetch<any>(
+            const captionData = await apiFetch<string>(
                 `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}/captions/${captionLanguage}`,
                 {
                     method: 'GET',
@@ -279,8 +285,8 @@ export const getVideoTranscript = withErrorHandling(async (videoId: string) => {
             );
             
             console.log('Successfully fetched caption data');
-            return captionData as unknown as string;
-        } catch (apiError) {
+            return captionData;
+        } catch {
             console.log('API fetch failed, trying direct URL access');
             
             // Fallback: Try to fetch the VTT file directly from CDN if available

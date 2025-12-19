@@ -129,6 +129,18 @@ declare interface BunnyVideoResponse {
   encodeProgress?: number;
 }
 
+declare interface BunnyCaptionInfo {
+  srclang: string;
+  label: string;
+}
+
+declare interface BunnyVideoInfo {
+  guid: string;
+  status: number;
+  encodeProgress?: number;
+  captions?: BunnyCaptionInfo[];
+}
+
 declare type ApiResponse<T> =
   | ({ success: true; error: null } & T)
   | { success: false; error: string };

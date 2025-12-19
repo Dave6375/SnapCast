@@ -249,36 +249,79 @@ export const calculateRecordingDuration = (startTime: number | null): number =>
     startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
 
 export function parseTranscript(transcript: string): TranscriptEntry[] {
-    const lines = transcript.replace(/^WEBVTT\s*/, "").split("\n");
+    if (!transcript || transcript.trim().length === 0) {
+        return [];
+    }
+
+    // Remove WEBVTT header and any metadata lines
+    const cleanedTranscript = transcript
+        .replace(/^WEBVTT\s*/i, "")
+        .replace(/^NOTE\s+.*$/gim, "")  // Remove NOTE lines
+        .replace(/^Kind:.*$/gim, "")     // Remove Kind metadata
+        .replace(/^Language:.*$/gim, ""); // Remove Language metadata
+
+    const lines = cleanedTranscript.split("\n");
     const result: TranscriptEntry[] = [];
     let tempText: string[] = [];
     let startTime: string | null = null;
 
     for (const line of lines) {
         const trimmedLine = line.trim();
+        
+        // Skip empty lines and cue identifiers (numbers)
+        if (!trimmedLine || /^\d+$/.test(trimmedLine)) {
+            continue;
+        }
+
+        // Match timestamp line with various formats
+        // Supports: HH:MM:SS.mmm --> HH:MM:SS.mmm and MM:SS.mmm --> MM:SS.mmm
         const timeMatch = trimmedLine.match(
-            /(\d{2}:\d{2}:\d{2})\.\d{3}\s-->\s(\d{2}:\d{2}:\d{2})\.\d{3}/
+            /^(\d{1,2}:)?(\d{2}:\d{2})[\.,](\d{3})\s*-->\s*(\d{1,2}:)?(\d{2}:\d{2})[\.,](\d{3})/
         );
 
         if (timeMatch) {
+            // Save previous caption if exists
             if (tempText.length > 0 && startTime) {
-                result.push({ time: startTime, text: tempText.join(" ") });
+                result.push({ 
+                    time: startTime, 
+                    text: tempText.join(" ").trim() 
+                });
                 tempText = [];
             }
-            startTime = timeMatch[1] ?? null;
+            
+            // Extract start time, format it properly
+            const hours = timeMatch[1] ? timeMatch[1].replace(":", "") : "00";
+            const minutesSeconds = timeMatch[2];
+            startTime = hours === "00" ? minutesSeconds : `${hours}:${minutesSeconds}`;
         } else if (trimmedLine) {
-            tempText.push(trimmedLine);
+            // Remove HTML tags and styling from caption text
+            const cleanText = trimmedLine
+                .replace(/<[^>]*>/g, "")  // Remove HTML tags
+                .replace(/\{[^}]*\}/g, "") // Remove WebVTT styling
+                .trim();
+            
+            if (cleanText) {
+                tempText.push(cleanText);
+            }
         }
 
+        // Group longer text segments (every 3 lines or at logical breaks)
         if (tempText.length >= 3 && startTime) {
-            result.push({ time: startTime, text: tempText.join(" ") });
+            result.push({ 
+                time: startTime, 
+                text: tempText.join(" ").trim() 
+            });
             tempText = [];
             startTime = null;
         }
     }
 
+    // Add any remaining text
     if (tempText.length > 0 && startTime) {
-        result.push({ time: startTime, text: tempText.join(" ") });
+        result.push({ 
+            time: startTime, 
+            text: tempText.join(" ").trim() 
+        });
     }
 
     return result;
@@ -303,8 +346,8 @@ export function daysAgo(inputDate: Date): string {
 export const createIframeLink = (videoId: string) =>
     `https://iframe.mediadelivery.net/embed/496531/${videoId}?autoplay=true&preload=true`;
 
-export const doesTitleMatch = (videos: any, searchQuery: string) =>
+export const doesTitleMatch = (videosTable: typeof videos, searchQuery: string) =>
     ilike(
-        sql`REPLACE(REPLACE(REPLACE(LOWER(${videos.title}), '-', ''), '.', ''), ' ', '')`,
+        sql`REPLACE(REPLACE(REPLACE(LOWER(${videosTable.title}), '-', ''), '.', ''), ' ', '')`,
         `%${searchQuery.replace(/[-. ]/g, "").toLowerCase()}%`
     );
